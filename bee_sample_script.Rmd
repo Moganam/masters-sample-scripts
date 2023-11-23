@@ -1,0 +1,690 @@
+---
+title: "bee_sample_script"
+author: "Moganavalli Kattan"
+date: "2023-11-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###Daily mean temperature
+
+#Process data
+
+Calculate daily mean of stations
+```{r}
+dmt_base_df <- dmt_base_df %>%
+  rename("Date" = "datetime_swedish")
+dmt_base <- temp_base %>%
+  group_by (Date) %>%
+  summarise(dmt_base_temp = mean(air_temp))
+write.csv(dmt_base, file = "dmt_base.csv")
+
+dmt_middle <- temp_middle %>%
+  group_by (Date) %>%
+  summarise(dmt_middle_temp = mean(air_temp))
+write.csv(dmt_middle, file = "dmt_middle.csv")
+
+dmt_summit <- temp_base %>%
+  group_by (Date) %>%
+  summarise(dmt_summit_temp = mean(air_temp))
+write.csv(dmt_summit, file = "dmt_summit.csv")
+```
+
+Rename columns
+```{r}
+dmt_sum_df <- dmt_sum_df %>%
+  rename("dmt_summit_temp" = "summit_temp")
+
+#remove outliers
+dmt_sum_df <- subset(dmt_sum_df, dmt_sum_df$dmt_summit_temp > -25)
+
+dmt_mid_df <- dmt_mid_df %>%
+  rename("dmt_middle_temp" = "middle_temp")
+
+dmt_base_df <- dmt_base_df %>%
+  rename("Date" = "datetime_swedish") %>%
+  rename("dmt_base_temp" = "base_temp")
+```
+
+Merge
+```{r}
+dmt_stations <- seq.Date(from = as.Date("2018-04-01"),
+        to = as.Date("2022-09-30"),
+        by = "day")  %>%
+  data.frame(Date = .)
+dmt_stations <- left_join(dmt_stations, dmt_base_df, by = "Date")
+dmt_stations <- left_join(dmt_stations, dmt_mid_df, by = "Date")
+dmt_stations <- left_join(dmt_stations, dmt_sum_df, by = "Date")
+dmt_stations <- dmt_stations[months(dmt_stations$Date) %in% month.name[4:9],]
+#sum and mid only missing some dates (<08/2019, 09/2022)
+```
+
+#How temperature changes over time
+```{r}
+dmt_stations <- dmt_stations %>%
+  mutate(diff_temp = dmt_base_temp - dmt_summit_temp)
+
+dmt_stations %>%
+  filter(Date >= "2022-01-01")%>%
+  ggplot(aes(x = Date, y = diff_temp)) +
+  geom_point(width = 0.1)+
+  geom_smooth(method = lm, se = TRUE, formula = y ~ x)+
+  xlab("Time of year") + 
+  ylab("Temperature (°C)")+
+  theme_classic()
+
+pdf(file = "station_temp.pdf", width = 10, height = 6)
+
+dmt_stations %>%
+  filter(Date >= "2022-01-01")%>%
+  ggplot() +
+  geom_line(aes(x = Date, y = dmt_summit_temp, colour = "summit"))+
+  geom_line(aes(x = Date, y = dmt_middle_temp, colour = "middle"))+
+  geom_line(aes(x = Date, y = dmt_base_temp, colour = "base"))+
+  xlab("Time of year") + 
+  ylab("Temperature (°C)")+
+  theme_classic()
+
+dev.off()
+
+```
+The difference between the stations remains constant
+
+#find intercept between stations
+```{r}
+#base and summit station
+A <- dmt_stations %>%
+  ggplot(aes(x = dmt_base_temp, y = dmt_summit_temp)) +
+  geom_point(width = 0.1)+
+  geom_smooth(method = lm, se = TRUE, formula = y ~ x)+
+  xlab("Daily mean temperature at base station (°C)") + 
+  ylab("Daily mean temperature at summit station (°C)")+
+  theme_classic()
+
+
+
+dmt_bs_lm <- lm(dmt_summit_temp ~ dmt_base_temp, data = dmt_stations)
+
+par(mfrow = c(2,2))
+    plot(dmt_bs_lm)
+    
+summary(dmt_bs_lm)
+```
+There is a significant relationship between the base and summit dmts (y =  +  x, R-squared: , F = , d.f. = ,, p ).
+
+
+```{r}
+#base and middle station
+B <- dmt_stations %>%
+  ggplot(aes(x = dmt_base_temp, y = dmt_middle_temp)) +
+  geom_point(width = 0.1)+
+  geom_smooth(method = lm, se = TRUE, formula = y ~ x)+
+  xlab("Daily mean temperature at base station (°C)") + 
+  ylab("Daily mean temperature at middle station (°C)")+
+  theme_classic()
+
+dmt_bm_lm <- lm(dmt_middle_temp ~ dmt_base_temp, data = dmt_stations)
+
+par(mfrow = c(2,2))
+    plot(dmt_bm_lm)
+    
+summary(dmt_bm_lm)
+
+```
+There is a significant relationship between the base and middle dmts (y =  +  x, R-squared: , F = , d.f. = ,, p ).
+
+
+```{r}
+#middle and summit station
+C <- dmt_stations %>%
+  ggplot(aes(x = dmt_middle_temp, y = dmt_summit_temp)) +
+  geom_point(width = 0.1)+
+  geom_smooth(method = lm, se = TRUE, formula = y ~ x)+
+  xlab("Daily mean temperature at middle station (°C)") + 
+  ylab("Daily mean temperature at summit station (°C)")+
+  theme_classic()
+
+dmt_ms_lm <- lm(dmt_summit_temp ~ dmt_middle_temp, data = dmt_stations)
+
+par(mfrow = c(2,2))
+    plot(dmt_ms_lm)
+    
+summary(dmt_ms_lm)
+```
+There is a significant relationship between the base and middle dmts (y =  +  x, R-squared: , F = , d.f. = ,, p ).
+
+```{r}
+pdf(file = "rates.pdf", width = 15, height =5)
+A + B + C + plot_layout(ncol = 3) + plot_annotation(tag_levels = "A")
+dev.off()
+```
+
+
+#Calculate rates of temperature change with altitude:
+Alt[base] = .392
+Alt[mid] = .699
+Alt[sum] = 1.169
+delta bs = .777
+delta bm = .307
+delta ms = .470
+rate = (c/delta) in degrees per km
+intercept = coefficients(TO_0_pgls)[1]
+```{r}
+#bs
+rate_bs <- (coefficients(dmt_bs_lm)[1]/0.777)
+rate_bs
+  
+#bm
+rate_bm <- (coefficients(dmt_bm_lm)[1]/0.307)
+rate_bm
+  
+#ms
+rate_ms <- (coefficients(dmt_ms_lm)[1]/0.470)
+rate_ms
+
+```
+
+#match temperature and bee observation data
+```{r}
+bee_macro <- bee_macro %>%
+  mutate(air_temp = case_when(
+    Date <=	"2018-07-20" ~ (air_temp = summit_temp + ((rate_bs/1000) * (Altitude-1169))),
+    (Date <=	"2019-06-18" | (Date >= "2022-09-21" & Date <= "2022-09-25") | Date == "2022-09-28" | Date == "2022-09-29") ~ (air_temp = base_temp + ((rate_bs/1000) * (Altitude-392))),
+    Altitude <= "690.45" ~ (air_temp = middle_temp + ((rate_bm/1000) * (Altitude-699))),
+    Altitude >= "748.85" ~ (air_temp = middle_temp + ((rate_ms/1000) * (Altitude-699)))
+    ))
+
+sum(is.na(bee_macro$air_temp))
+```
+
+###Visualise data and run analyses
+
+Species temperature preference
+```{r}
+D <- bee_macro %>%
+  mutate(class = fct_reorder(Bombus_Species, air_temp, .fun = 'mean'))%>%
+  ggplot(aes(x = reorder(Bombus_Species, air_temp), y = air_temp, colour = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_jitter(width = 0.1, show.legend = FALSE) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", 
+    colour = "black", width = 0.1, 
+    position = position_nudge(x = 0.15)) +
+  stat_summary(fun = mean, geom = "point", 
+    colour = "black", size = 3, 
+    position = position_nudge(x = 0.15)) + 
+  xlab("") +  
+  ylab("Temperature (°C)")+
+  coord_flip()+
+  theme_classic()+
+  theme(axis.text.y = element_text(face = 'italic'))
+
+
+
+temp_lm <- lm(air_temp ~ Bombus_Species, data = bee_macro)
+
+par(mfrow = c(2,2))
+    plot(temp_lm)
+    
+anova(temp_lm)
+
+summary(temp_lm)
+```
+
+There was a significant correlation between mean Temperature and Bombus_Species (GLS: R-squared: , F = , df = , , p ).
+
+##ITD Analyses
+
+Comparing mean temp to intertegular distance (ITD)
+```{r}
+mean_ITD_df <- bee_macro %>%
+  filter(!is.na (Intertegular_distance_cm)) %>%
+  group_by(Bombus_Species) %>%
+  summarise (mean_ITD = mean(Intertegular_distance_cm))
+
+ITD_mean_temp_df <- left_join(mean_ITD_df, tempsummary, by = "Bombus_Species")
+
+X <- ITD_mean_temp_df %>%
+  ggplot(aes(x = mean_ITD, y = mean_temp, colour = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_point(width = 0.1, size = 10 , show.legend = FALSE)+
+  xlab("Mean intertegular distance (cm)") + 
+  ylab("Mean temperature (°C)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+
+
+ITD_lm <- lm(mean_temp ~ mean_ITD, data = ITD_mean_temp_df)
+
+par(mfrow = c(2,2))
+    plot(ITD_lm)
+    
+summary(ITD_lm)
+```
+There is not a significant linear relationship between the mean temperature of species occurrence and mean species ITD (LM: R-squared: , F=, d.f.=,, p = ).
+
+
+#calculating temperature and altitude in future scanarios
+Scenario 1
+2050 +0.4
+2100 +0.3
+Scenario 2
+2050 +0.4
+2100 +0.7
+Scenario 3
+2050 +0.4
+2100 +1.6
+Scenario 4
+2050 +0.4
+2100 +2.5
+Scenario 5
+2050 +0.5
+2100 +3.3
+
+From bee data
++delta temp to air_temp
+```{r}
+bee_macro <- bee_macro %>%
+  mutate(temp_SSP_50 = air_temp + 0.4)
+
+bee_macro <- bee_macro %>%
+  mutate(temp_SSP5.8.5_50 = air_temp + 0.5)
+
+bee_macro <- bee_macro %>%
+  mutate(temp_SSP1.1.9_100 = air_temp + 0.3)
+
+bee_macro <- bee_macro %>%
+  mutate(temp_SSP1.2.6_100 = air_temp + 0.7)
+
+bee_macro <- bee_macro %>%
+  mutate(temp_SSP2.4.5_100 = air_temp + 1.6)
+
+bee_macro <- bee_macro %>%
+  mutate(temp_SSP3.7.0_100 = air_temp + 2.5)
+
+bee_macro <- bee_macro %>%
+  mutate(temp_SSP5.8.5_100 = air_temp + 3.3)
+```
+These are the temperatures at the current altitudes at which the bee was found
+
+
+use new temp and alt to calculate new alt at which air_temp can be found
+```{r}
+bee_macro <- bee_macro %>%
+  mutate(alt_SSP_50 = Altitude - (400/rate_bs))
+
+bee_macro <- bee_macro %>%
+  mutate(alt_SSP5.8.5_50 = Altitude - (500/rate_bs))
+
+bee_macro <- bee_macro %>%
+  mutate(alt_SSP1.1.9_100 = Altitude - (300/rate_bs))
+
+bee_macro <- bee_macro %>%
+  mutate(alt_SSP1.2.6_100 = Altitude - (700/rate_bs))
+
+bee_macro <- bee_macro %>%
+  mutate(alt_SSP2.4.5_100 = Altitude - (1600/rate_bs))
+
+bee_macro <- bee_macro %>%
+  mutate(alt_SSP3.7.0_100 = Altitude - (2500/rate_bs))
+
+bee_macro <- bee_macro %>%
+  mutate(alt_SSP5.8.5_100 = Altitude - (3300/rate_bs))
+```
+
+#calculate and plot the impact (% population loss) under climate scenarios
+1
+```{r}
+temp1_impact_df <- bee_macro %>%
+  group_by(Bombus_Species) %>%
+  mutate(upper_limit = max(air_temp)) %>%
+  mutate(satisfies = case_when(
+		temp_SSP_50 > upper_limit ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(temp1_impact = mean(satisfies) * 100)
+
+alt1_impact_df <- bee_macro %>%
+  mutate(satisfies = case_when(
+		alt_SSP_50 > 1169 ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(alt1_impact = mean(satisfies) * 100)
+```
+2
+```{r}
+temp2_impact_df <- bee_macro %>%
+  group_by(Bombus_Species) %>%
+  mutate(upper_limit = max(air_temp)) %>%
+  mutate(satisfies = case_when(
+		temp_SSP5.8.5_50 > upper_limit ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(temp2_impact = mean(satisfies) * 100)
+
+alt2_impact_df <- bee_macro %>%
+  mutate(satisfies = case_when(
+		alt_SSP5.8.5_50 > 1169 ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(alt2_impact = mean(satisfies) * 100)
+```
+3
+```{r}
+temp3_impact_df <- bee_macro %>%
+  group_by(Bombus_Species) %>%
+  mutate(upper_limit = max(air_temp)) %>%
+  mutate(satisfies = case_when(
+		temp_SSP1.1.9_100 > upper_limit ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(temp3_impact = mean(satisfies) * 100)
+
+alt3_impact_df <- bee_macro %>%
+  mutate(satisfies = case_when(
+		alt_SSP1.1.9_100 > 1169 ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(alt3_impact = mean(satisfies) * 100)
+```
+4
+```{r}
+temp4_impact_df <- bee_macro %>%
+  group_by(Bombus_Species) %>%
+  mutate(upper_limit = max(air_temp)) %>%
+  mutate(satisfies = case_when(
+		temp_SSP1.2.6_100 > upper_limit ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(temp4_impact = mean(satisfies) * 100)
+
+alt4_impact_df <- bee_macro %>%
+  mutate(satisfies = case_when(
+		alt_SSP1.2.6_100 > 1169 ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(alt4_impact = mean(satisfies) * 100)
+```
+5
+```{r}
+temp5_impact_df <- bee_macro %>%
+  group_by(Bombus_Species) %>%
+  mutate(upper_limit = max(air_temp)) %>%
+  mutate(satisfies = case_when(
+		temp_SSP2.4.5_100 > upper_limit ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(temp5_impact = mean(satisfies) * 100)
+
+alt5_impact_df <- bee_macro %>%
+  mutate(satisfies = case_when(
+		alt_SSP2.4.5_100 > 1169 ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(alt5_impact = mean(satisfies) * 100)
+```
+6
+```{r}
+temp6_impact_df <- bee_macro %>%
+  group_by(Bombus_Species) %>%
+  mutate(upper_limit = max(air_temp)) %>%
+  mutate(satisfies = case_when(
+		temp_SSP3.7.0_100 > upper_limit ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(temp6_impact = mean(satisfies) * 100)
+
+alt6_impact_df <- bee_macro %>%
+  mutate(satisfies = case_when(
+		alt_SSP3.7.0_100 > 1169 ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(alt6_impact = mean(satisfies) * 100)
+```
+7
+```{r}
+temp7_impact_df <- bee_macro %>%
+  group_by(Bombus_Species) %>%
+  mutate(upper_limit = max(air_temp)) %>%
+  mutate(satisfies = case_when(
+		temp_SSP5.8.5_100 > upper_limit ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(temp7_impact = mean(satisfies) * 100)
+
+alt7_impact_df <- bee_macro %>%
+  mutate(satisfies = case_when(
+		alt_SSP5.8.5_100 > 1169 ~ 1,
+		.default = 0)) %>%
+	group_by(Bombus_Species) %>% 
+	summarise(alt7_impact = mean(satisfies) * 100)
+```
+
+```{r}
+tempall_impact_df <- left_join(temp1_impact_df, temp2_impact_df, by = "Bombus_Species")
+tempall_impact_df <- left_join(tempall_impact_df, temp3_impact_df, by = "Bombus_Species") 
+tempall_impact_df <- left_join(tempall_impact_df, temp4_impact_df, by = "Bombus_Species") 
+tempall_impact_df <- left_join(tempall_impact_df, temp5_impact_df, by = "Bombus_Species") 
+tempall_impact_df <- left_join(tempall_impact_df, temp6_impact_df, by = "Bombus_Species") 
+tempall_impact_df <- left_join(tempall_impact_df, temp7_impact_df, by = "Bombus_Species") 
+  
+altall_impact_df <- left_join(alt1_impact_df, alt2_impact_df, by = "Bombus_Species")
+altall_impact_df <- left_join(altall_impact_df, alt3_impact_df, by = "Bombus_Species") 
+altall_impact_df <- left_join(altall_impact_df, alt4_impact_df, by = "Bombus_Species") 
+altall_impact_df <- left_join(altall_impact_df, alt5_impact_df, by = "Bombus_Species") 
+altall_impact_df <- left_join(altall_impact_df, alt6_impact_df, by = "Bombus_Species") 
+altall_impact_df <- left_join(altall_impact_df, alt7_impact_df, by = "Bombus_Species") 
+```
+
+```{r}
+S1_temp <- left_join(temp1_impact_df, temp3_impact_df, by = "Bombus_Species")
+S1_temp <- S1_temp %>%
+  rename("2050" = "temp1_impact")%>%
+  rename("2100" = "temp3_impact")%>%
+  mutate("2020" = 0)%>%
+  pivot_longer(!Bombus_Species, names_to = "year", values_to = "impact")%>%
+  mutate(year = as.integer(year))
+
+S2_temp <- left_join(temp1_impact_df, temp4_impact_df, by = "Bombus_Species")
+S2_temp <- S2_temp %>%
+  rename("2050" = "temp1_impact")%>%
+  rename("2100" = "temp4_impact")%>%
+  mutate("2020" = 0)%>%
+  pivot_longer(!Bombus_Species, names_to = "year", values_to = "impact")%>%
+  mutate(year = as.integer(year))
+
+S3_temp <- left_join(temp1_impact_df, temp5_impact_df, by = "Bombus_Species")
+S3_temp <- S3_temp %>%
+  rename("2050" = "temp1_impact")%>%
+  rename("2100" = "temp5_impact")%>%
+  mutate("2020" = 0)%>%
+  pivot_longer(!Bombus_Species, names_to = "year", values_to = "impact")%>%
+  mutate(year = as.integer(year))
+
+S4_temp <- left_join(temp1_impact_df, temp6_impact_df, by = "Bombus_Species")
+S4_temp <- S4_temp %>%
+  rename("2050" = "temp1_impact")%>%
+  rename("2100" = "temp6_impact")%>%
+  mutate("2020" = 0)%>%
+  pivot_longer(!Bombus_Species, names_to = "year", values_to = "impact")%>%
+  mutate(year = as.integer(year))
+
+S5_temp <- left_join(temp2_impact_df, temp7_impact_df, by = "Bombus_Species")
+S5_temp <- S5_temp %>%
+  rename("2050" = "temp2_impact")%>%
+  rename("2100" = "temp7_impact")%>%
+  mutate("2020" = 0)%>%
+  pivot_longer(!Bombus_Species, names_to = "year", values_to = "impact")%>%
+  mutate(year = as.integer(year))
+```
+
+```{r}
+AO <-  S1_temp %>%
+  ggplot(aes(x = year, y = impact, colour = Bombus_Species, group = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_line(width = 0.1) +
+  scale_x_continuous(breaks = c(2020, 2050, 2100))+
+  xlab("Year") + 
+  ylab("Individuals lost per species (%)")+
+  ylim(0, 100)+
+  ggtitle("SSP1-1.9 (very low)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+
+AP <-  S2_temp %>%
+  ggplot(aes(x = year, y = impact, colour = Bombus_Species, group = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_line(width = 0.1) +
+  scale_x_continuous(breaks = c(2020, 2050, 2100))+
+  xlab("Year") + 
+  ylab("Individuals lost per species (%)")+
+  ylim(0, 100)+
+  ggtitle("SSP1-2.6 (low)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+  
+AQ <-    S3_temp %>%
+  ggplot(aes(x = year, y = impact, colour = Bombus_Species, group = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_line(width = 0.1) +
+  scale_x_continuous(breaks = c(2020, 2050, 2100))+
+  xlab("Year") + 
+  ylab("Individuals lost per species (%)")+
+  ylim(0, 100)+
+  ggtitle("SSP2-4.5 (intermediate)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+    
+ AR <-     S4_temp %>%
+  ggplot(aes(x = year, y = impact, colour = Bombus_Species, group = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_line(width = 0.1) +
+  scale_x_continuous(breaks = c(2020, 2050, 2100))+
+  xlab("Year") + 
+  ylab("Individuals lost per species (%)")+
+  ylim(0, 100)+
+  ggtitle("SSP3-7.0 (high)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+      
+ AS <-       S5_temp %>%
+  ggplot(aes(x = year, y = impact, colour = Bombus_Species, group = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_line(width = 0.1) +
+  scale_x_continuous(breaks = c(2020, 2050, 2100))+
+  xlab("Year") + 
+  ylab("Individuals lost per species (%)")+
+  ylim(0, 100)+
+  ggtitle("SSP5-8.5 (very high)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+
+```
+
+```{r}
+S1_alt <- left_join(alt1_impact_df, alt3_impact_df, by = "Bombus_Species")
+S1_alt <- S1_alt %>%
+  rename("2050" = "alt1_impact")%>%
+  rename("2100" = "alt3_impact")%>%
+  mutate("2020" = 0)%>%
+  pivot_longer(!Bombus_Species, names_to = "year", values_to = "impact")%>%
+  mutate(year = as.integer(year))
+
+S2_alt <- left_join(alt1_impact_df, alt4_impact_df, by = "Bombus_Species")
+S2_alt <- S2_alt %>%
+  rename("2050" = "alt1_impact")%>%
+  rename("2100" = "alt4_impact")%>%
+  mutate("2020" = 0)%>%
+  pivot_longer(!Bombus_Species, names_to = "year", values_to = "impact")%>%
+  mutate(year = as.integer(year))
+
+S3_alt <- left_join(alt1_impact_df, alt5_impact_df, by = "Bombus_Species")
+S3_alt <- S3_alt %>%
+  rename("2050" = "alt1_impact")%>%
+  rename("2100" = "alt5_impact")%>%
+  mutate("2020" = 0)%>%
+  pivot_longer(!Bombus_Species, names_to = "year", values_to = "impact")%>%
+  mutate(year = as.integer(year))
+
+S4_alt <- left_join(alt1_impact_df, alt6_impact_df, by = "Bombus_Species")
+S4_alt <- S4_alt %>%
+  rename("2050" = "alt1_impact")%>%
+  rename("2100" = "alt6_impact")%>%
+  mutate("2020" = 0)%>%
+  pivot_longer(!Bombus_Species, names_to = "year", values_to = "impact")%>%
+  mutate(year = as.integer(year))
+
+S5_alt <- left_join(alt2_impact_df, alt7_impact_df, by = "Bombus_Species")
+S5_alt <- S5_alt %>%
+  rename("2050" = "alt2_impact")%>%
+  rename("2100" = "alt7_impact")%>%
+  mutate("2020" = 0)%>%
+  pivot_longer(!Bombus_Species, names_to = "year", values_to = "impact")%>%
+  mutate(year = as.integer(year))
+```
+
+
+```{r}
+AT <-  S1_alt %>%
+  ggplot(aes(x = year, y = impact, colour = Bombus_Species, group = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_line(width = 0.1) +
+  scale_x_continuous(breaks = c(2020, 2050, 2100))+
+  xlab("Year") + 
+  ylab("Individuals lost per species (%)")+
+  ylim(0, 100)+
+  ggtitle("SSP1-1.9 (very low)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+
+AU <-  S2_alt %>%
+  ggplot(aes(x = year, y = impact, colour = Bombus_Species, group = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_line(width = 0.1) +
+  scale_x_continuous(breaks = c(2020, 2050, 2100))+
+  xlab("Year") + 
+  ylab("Individuals lost per species (%)")+
+  ylim(0, 100)+
+  ggtitle("SSP1-2.6 (low)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+  
+AV <-    S3_alt %>%
+  ggplot(aes(x = year, y = impact, colour = Bombus_Species, group = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_line(width = 0.1) +
+  scale_x_continuous(breaks = c(2020, 2050, 2100))+
+  xlab("Year") + 
+  ylab("Individuals lost per species (%)")+
+  ylim(0, 100)+
+  ggtitle("SSP2-4.5 (intermediate)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+    
+AW <-      S4_alt %>%
+  ggplot(aes(x = year, y = impact, colour = Bombus_Species, group = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_line(width = 0.1) +
+  scale_x_continuous(breaks = c(2020, 2050, 2100))+
+  xlab("Year") + 
+  ylab("Individuals lost per species (%)")+
+  ylim(0, 100)+
+  ggtitle("SSP3-7.0 (high)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+      
+AX <-        S5_alt %>%
+  ggplot(aes(x = year, y = impact, colour = Bombus_Species, group = Bombus_Species)) +
+  scale_color_manual(values = c("#C49AA6", "#7B8B59", "#FEE5B3", "#AEDFF9", "#EBAE9D", "#C1E1D9", "#FABD9E", "#BAA8D8", "#799AC0", "#E8B6AB", "#F4C259", "#A4B996", "#BFA58C", "#6F93A4", "#84A67D"))+
+  geom_line(width = 0.1) +
+  scale_x_continuous(breaks = c(2020, 2050, 2100))+
+  xlab("Year") + 
+  ylab("Individuals lost per species (%)")+
+  ylim(0, 100)+
+  ggtitle("SSP5-8.5 (very high)")+
+  guides (colour = guide_legend(title = "Bombus species"))+
+  theme_classic()
+
+```

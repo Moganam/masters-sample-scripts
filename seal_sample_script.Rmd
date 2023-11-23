@@ -1,0 +1,381 @@
+---
+title: "seal_sample_script"
+author: "Moganavalli Kattan"
+date: "2023-11-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Add and clean phylogenetic tree
+#Read dataset
+pinniped_tree <- read.tree("data/phylogeny_seal_impedance_matching")
+pinniped_tree
+plot(pinniped_tree, cex = 0.2)
+
+#Remove extra species
+
+pinniped_tree <- drop.tip(pinniped_tree, tip = c("Mirounga_angustirostris", "Phoca_largha", "Arctocephalus_townsendi", "Zalophus_wollebaeki", "Odobenus_rosmarus", "Aonyx_cinerea", "Lutra_lutra", "Lutra_sumatrana", "Enhydra_lutris", "Lontra_canadensis", "Lontra_felina", "Lontra_provocax", "Lontra_longicaudis", "Pteronura_brasiliensis", "Mustela_altaica", "Mustela_nivalis", "Mustela_eversmanni", "Mustela_putorius", "Mustela_nigripes", "Mustela_lutreola", "Mustela_sibirica", "Mustela_erminea", "Mustela_strigidorsa", "Mustela_frenata", "Mustela_felipei", "Mustela_vison", "Galictis_cuja", "Galictis_vittata", "Ictonyx_striatus", "Eira_barbara", "Pekania_pennanti", "Gulo_gulo", "Martes_foina", "Martes_melampus", "Martes_martes", "Martes_zibellina", "Martes_flavigula", "Melogale_moschata", "Melogale_cucphuongensis", "Arctonyx_collaris", "Meles_meles", "Meles_leucurus", "Mellivora_capensis", "Taxidea_taxus", "Bassaricyon_alleni", "Bassaricyon_neblina", "Nasua_narica", "Nasuella_meridensis", "Nasua_nasua", "Bassariscus_astutus", "Bassariscus_sumichrasti", "Procyon_cancrivorus", "Procyon_lotor", "Potos_flavus", "Ailurus_fulgens", "Conepatus_chinga", "Conepatus_leuconotus", "Mephitis_macroura", "Mephitis_mephitis", "Spilogale_gracilis", "Spilogale_putorius", "Mydaus_javanensis", "Mydaus_marchei", "Ursus_spelaeus", "Ursus_deningeri", "Ursus_arctos", "Helarctos_malayanus", "Melursus_ursinus", "Tremarctos_ornatus", "Arctodus_simus", "Ailuropoda_melanoleuca"))
+
+write.tree(pinniped_tree, file = "pinniped_tree_clean.tre")
+
+
+##Loading cleaned tree
+```{r}
+pinniped_tree_clean <- read.tree("data/pinniped_tree_clean.tre")
+pinniped_tree_clean
+plot(pinniped_tree_clean, cex = 0.2)
+
+# Look at the first 5 tip labels
+pinniped_tree_clean$tip.label[1:5]
+```
+
+```{r}
+# Plot the tree
+plot(pinniped_tree_clean, cex = 0.2)
+plot(pinniped_tree_clean, cex = 0.2, typ = "fan", no.margin = TRUE)
+```
+Create trees for only pinniped and only outgroup
+```{r}
+only_pinniped <- drop.tip(pinniped_tree_clean, tip = c("Ursus_americanus", "Ursus_maritimus", "	
+Ursus_thibetanus", "Aonyx_capensis", "Lutragale_perspicillata", "Hydrictis_maculicollis", "Mustela_itatsi", "Mustela_kathiah", "Mustela_nudipes", "Mustela_africana", "Lyncodon_patagonicus", "Poecilogale_albinucha", "Ictonyx_libycus", "Vormela_peregusna", "Melogale_personata", "Martes_americana", "Meles_anakuma", "Nasuella_olivacea", "Bassaricyon_medius", "Bassaricyon_gabbii"))
+```
+
+```{r}
+only_outgroup <- drop.tip(pinniped_tree_clean, tip = c("Erignathus_barbatus", "Crystophora_cristata", "Phoca_vitulina", "Pusa_hispida", "Pusa_sibirica", "Pusa_caspica", "Halichoerus_grypus", "Pagophilus_groenlandicus", "Histriophoca_fasciata", "Monachus_monachus", "Neomonachus_tropicalis", "Neomonachus_shauinslandi", "Mirounga_leonina", "Lobodon_carcinophaga", "Hydrurga_leptonyx", "Leptonychotes_weddellii", "Ommatophoca_rossii", "Arctocephalus_pusillus", "Arctocephalus_gazella", "Arctocephalus_philippii", "Arctocephalus_galapagoensis", "Arctocephalus_forsteri", "Arctocephalus_tropicalis", "Arctocephalus_australis", "Callorhinus_ursinus", "Eumetopias_jubatus", "Neophoca_cinerea", "Otaria_byronia", "Phocarctos_hookeri", "Zalophus_californianus", "Zalophus_japonicus"))
+```
+
+```{r}
+plot(pinniped_tree_clean, cex = 0.2)
+plot(only_pinniped, cex = 0.2)
+plot(only_outgroup, cex = 0.2)
+```
+
+
+```{r}
+# Check whether the tree is binary
+# We want this to be TRUE
+is.binary.tree(pinniped_tree_clean) 
+is.binary.tree(only_pinniped) 
+is.binary.tree(only_outgroup) 
+
+# Check the tree is ultrametric
+is.ultrametric(pinniped_tree_clean)
+is.ultrametric(only_pinniped)
+is.ultrametric(only_outgroup)
+
+force.ultrametric(pinniped_tree_clean)
+force.ultrametric(only_outgroup)
+```
+
+
+#Process my data
+Defining abbreviations:
+T: Tympanic membrane
+O: Oval window
+R: Round window
+S: Skull
+L: length
+W: width
+H: height
+A: area
+GM: geometric mean (of skull variables)
+_LSR: log shape ratio #CHANGE TO SCALED AREA
+
+Create area variables
+```{r}
+#Create TA variable
+seal_data <- seal_data %>%
+  mutate(TA = pi*(TL/2)*(TW/2))
+
+#Create OA variable
+seal_data <- seal_data %>%
+  mutate(OA = pi*(OL/2)*(OW/2))
+
+#Create RA variable
+seal_data <- seal_data %>%
+  mutate(RA = pi*(RL/2)*(RW/2))
+```
+
+Create area ratios
+```{r}
+seal_data<- seal_data %>%
+  mutate(TOratio = TA/OA)
+
+seal_data <- seal_data %>%
+  mutate(log_TOratio = log10(TOratio))
+
+seal_data<- seal_data %>%
+  mutate(ROratio = RA/OA)
+
+seal_data <- seal_data %>%
+  mutate(log_ROratio = log10(ROratio))
+
+```
+
+
+Create GM variable and adjust areas by GM
+```{r}
+#GM
+seal_data <- seal_data %>% 
+  rowwise() %>%
+  mutate(GM = geometric.mean(c(SL, SH, SW))) %>%
+  mutate_at(vars(TA : RA), list(LSR = ~ log10( . / GM)))
+
+```
+
+
+#Matching the tree to the data
+
+```{r}
+# Check whether the names match in the data and the tree
+check <- name.check(phy = pinniped_tree_clean, data = seal_data, 
+                    data.names = pinniped_tree_clean$tip.label)
+
+check
+
+check <- name.check(phy = only_pinniped, data = seal_data, 
+                    data.names = only_pinniped$tip.label)
+
+check
+
+check <- name.check(phy = only_outgroup, data = seal_data, 
+                    data.names = only_outgroup$tip.label)
+
+check
+
+```
+
+```{r}
+# Combine and match the tree and data
+sealstuff <- make.treedata(tree = pinniped_tree_clean,  data = seal_data)
+
+# Look at the tree
+sealstuff$phy
+
+# Look at the data
+glimpse(sealstuff$dat)
+
+# Make a new column called tiplabel with the tip labels in it
+sealstuff$dat$tiplabel <- sealstuff$phy$tip.label
+# Force mydata to be a data frame
+mydata <- as.data.frame(sealstuff$dat)
+# Save tree as mytree
+mytree <- sealstuff$phy
+
+
+
+# Combine and match the tree and data
+pinnipedstuff <- make.treedata(tree = only_pinniped,  data = Pinniped_df)
+
+# Look at the tree
+pinnipedstuff$phy
+
+# Look at the data
+glimpse(pinnipedstuff$dat)
+
+# Make a new column called tiplabel with the tip labels in it
+pinnipedstuff$dat$tiplabel <- pinnipedstuff$phy$tip.label
+# Force mydata to be a data frame
+pinnipeddata <- as.data.frame(pinnipedstuff$dat)
+# Save tree as mytree
+pinnipedtree <- pinnipedstuff$phy
+
+
+
+
+# Combine and match the tree and data
+outgroupstuff <- make.treedata(tree = only_outgroup,  data = Outgroup_df)
+
+# Look at the tree
+outgroupstuff$phy
+
+# Look at the data
+glimpse(outgroupstuff$dat)
+
+# Make a new column called tiplabel with the tip labels in it
+outgroupstuff$dat$tiplabel <- outgroupstuff$phy$tip.label
+# Force mydata to be a data frame
+outgroupdata <- as.data.frame(outgroupstuff$dat)
+# Save tree as mytree
+outgrouptree <- outgroupstuff$phy
+```
+
+
+```{r}
+seal <- comparative.data(phy = mytree, data = mydata, 
+                            names.col = tiplabel, vcv = TRUE, 
+                            na.omit = FALSE, warn.dropped = TRUE)
+
+pinniped <- comparative.data(phy = pinnipedtree, data = pinnipeddata, 
+                            names.col = tiplabel, vcv = TRUE, 
+                            na.omit = FALSE, warn.dropped = TRUE)
+
+outgroup <- comparative.data(phy = outgrouptree, data = outgroupdata, 
+                            names.col = tiplabel, vcv = TRUE, 
+                            na.omit = FALSE, warn.dropped = TRUE)
+```
+
+
+#Visualise and analyse data
+
+#Areas against each other (shows isometry)
+```{r}
+TO_0_pgls <- pgls(log10(OA) ~ log10(TA), data = seal, lambda = "ML")
+
+p1 <- ggplot(seal_data, aes(x = log10(TA), y = log10(OA), colour = Clade))+
+  geom_point()+
+  scale_color_manual(values = c("#725752", "#BBBE64", "#96C0B7", "#878E88", "#E2C044"))+
+  geom_abline(slope = coefficients(TO_0_pgls)[2], 
+              intercept = coefficients(TO_0_pgls)[1], colour = "#26413C")+
+  geom_abline(intercept = coefficients(TO_0_pgls)[1], slope = 1, colour = "#26413C", 
+                 linetype="dashed")+
+  xlab("log tympanic membrane area (mm )") + 
+  ylab("log oval window area (mm )")+
+  labs(tag = "A")+
+  theme_classic()
+
+
+
+# m significantly different to 1?
+TO_1_pgls <- pgls((log10(OA)-log10(TA)) ~ log10(TA), data = seal, lambda = "ML")
+
+par(mfrow = c(2,2))
+    plot(TO_0_pgls)
+
+anova(TO_0_pgls)    
+summary(TO_0_pgls)
+
+anova(TO_1_pgls)    
+summary(TO_1_pgls)
+```
+There is a significant positive relationship between the tympanic membrane area oval window area (y =  +  x, R-squared: , F = , d.f. = ,, p ).
+
+The slope is not significantly different to 1. The TA and OA are therefore isometric.
+
+
+## Are aquatic and terrestrial signifcantly different (linear models comparing groups)
+TA_LSR, OA_LSR, RA_LSR, ratios (raw or log transformed or LSR)
+
+#TA
+Pinniped vs mustelid vs ursid
+```{r}
+seal_data %>%
+  ggplot(aes(x = Clade, y = TA_LSR, colour = Clade)) +
+  geom_jitter(width = 0.1) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", 
+    colour = "black", width = 0.1, 
+    position = position_nudge(x = 0.15)) +
+  stat_summary(fun = mean, geom = "point", 
+    colour = "black", size = 3, 
+    position = position_nudge(x = 0.15)) + 
+  scale_color_manual(values = c("#725752", "#BBBE64", "#96C0B7", "#878E88", "#E2C044"))+
+  xlab("Clade") + 
+  ylab("log scaled tympanic membrane area (mm )")+
+  coord_flip()+
+  theme_classic()
+
+# Fit a PGLS model
+TA_LSR_pgls <- pgls(TA_LSR ~ Clade, 
+                   data = seal, lambda = "ML")
+
+par(mfrow = c(2,2))
+    plot(TA_LSR_pgls)
+    
+anova(TA_LSR_pgls)
+
+summary(TA_LSR_pgls)
+```
+There was not a significant correlation between mean TA and Clade (PGLS: R-squared: , F = , df = , , p = , λ = ).
+
+Terrestrial vs semi-aquatic (pinnipeds + otters)
+```{r}
+p8 <- seal_data %>%
+  ggplot(aes(x = Semi_aquatic, y = TA_LSR, colour = Clade)) +
+  geom_jitter(width = 0.1) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", 
+    colour = "black", width = 0.1, 
+    position = position_nudge(x = 0.15)) +
+  stat_summary(fun = mean, geom = "point", 
+    colour = "black", size = 3, 
+    position = position_nudge(x = 0.15)) + 
+  scale_color_manual(values = c("#725752", "#BBBE64", "#96C0B7", "#878E88", "#E2C044"))+
+  xlab("Clade") + 
+  ylab("log scaled tympanic membrane area (mm )")+
+  scale_x_discrete(labels = c("TRUE" = "Semi aquatic", "FALSE" = "Terrestrial"))+
+  labs(tag = "B")+
+  coord_flip()+
+  theme_classic()
+
+# Fit a PGLS model
+TA_LSR_pgls <- pgls(TA_LSR ~ Semi_aquatic, 
+                   data = seal, lambda = "ML")
+
+par(mfrow = c(2,2))
+    plot(TA_LSR_pgls)
+    
+anova(TA_LSR_pgls)
+
+summary(TA_LSR_pgls)
+```
+There was not a significant correlation between mean TA and Clade (PGLS: R-squared: , F = , df = , , p = , λ = ).
+
+
+##variation in pinnipeds
+TA
+```{r}
+p18 <- Pinniped_df %>%
+  ggplot(aes(x = Clade, y = TA_LSR, colour = Clade)) +
+  geom_jitter(width = 0.1) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", 
+    colour = "black", width = 0.1, 
+    position = position_nudge(x = 0.15)) +
+  stat_summary(fun = mean, geom = "point", 
+    colour = "black", size = 3, 
+    position = position_nudge(x = 0.15)) +
+  scale_color_manual(values = c("#725752", "#96C0B7", "#878E88"))+
+  xlab("Clade") + 
+  ylab("log scaled tympanic membrane area (mm )")+
+  labs(tag = "B")+
+  coord_flip()+
+  theme_classic()
+
+# Fit a PGLS model
+TA_LSR_pgls <- pgls(TA_LSR ~ Clade, 
+                   data = pinniped, lambda = "ML")
+
+par(mfrow = c(2,2))
+    plot(TA_LSR_pgls)
+    
+anova(TA_LSR_pgls)
+
+summary(TA_LSR_pgls)
+```
+There was a significant correlation between mean TA and Clade (PGLS: R-squared: , F = , df = , , p = , λ = ).
+
+#Diving depth amongst Pinnipeds (possible explanation as to why there is variation amongst pinnipeds): ANCOVA
+
+#TA_LSR ~ Diving_depth
+```{r}
+p23 <- ggplot(Pinniped_df, aes(x = Diving_depth, y = TA_LSR, colour = Clade))+
+geom_point()+
+geom_smooth(method = lm, se = FALSE, formula = y ~ x)+
+  scale_color_manual(values = c("#725752", "#96C0B7", "#878E88"))+
+  xlab("Diving depth (m)") + 
+  ylab("log scaled
+  tympanic membrane area (mm )")+
+  labs(tag = "B")+
+  theme_classic()
+
+diving_pgls <- pgls(TA_LSR ~ Diving_depth * Clade, 
+              data = pinniped, lambda = "ML")
+
+anova(diving_pgls)
+summary(diving_pgls)
+
+par(mfrow = c(2,2))
+    plot(diving_pgls)
+```
+There were significant effects of diving depth (ANCOVA: F=, df=,, p=) and Clade (F=, df=,, p=) on Tympanic membrane area. The interaction between diving depth and Clade was not significant (F=, df=,, p=). Monachini TA increases with depth, but remains constant for Phochinae and Otariids (Figure x).
